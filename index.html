@@ -1380,11 +1380,33 @@ $('#cPick').onchange=e=>{if(e.target.value)keepCal(()=>{curYM=e.target.value; re
 $('#calMode').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
   calMode=b.dataset.cm; $$('#calMode button').forEach(x=>x.classList.toggle('on',x===b));
   renderCalendar(txOf(curYM));});
+/* 접혀 있는 가지까지 포함해 트리 전체에서 예산 초과 항목을 모은다.
+   초과한 하위 항목이 있으면 상위는 빼고 가장 구체적인 지점만 남긴다 */
+function overList(list){
+  const out=[];
+  const walk=c=>{
+    let deep=false;
+    kids(c.id).forEach(k=>{if(walk(k))deep=true;});
+    const goal=(rootOf(c)||{}).type==='saving';       /* 저축은 넘겨도 좋은 것 */
+    const b=budgetOf(c.id,curYM), s=spent(c.id,list);
+    const over=!!b&&!goal&&s>b;
+    if(over&&!deep)out.push(c.name);
+    return over||deep;
+  };
+  roots().filter(c=>c.type!=='income').forEach(walk);
+  return out;
+}
+function paintOverWarn(list){
+  const w=$('#overWarn'); if(!w)return;
+  const overs=overList(list);
+  if(overs.length){w.classList.remove('hide');
+    w.innerHTML='<span>🔔</span><div><b>예산을 넘긴 항목이 '+overs.length+'개 있습니다.</b><br>'+esc(overs.join(', '))+'</div>';}
+  else w.classList.add('hide');
+}
 function renderBudgetTree(list){
   const tgt=roots().filter(c=>c.type!=='income');
   if(!tgt.length){$('#budgetTree').innerHTML='<div class="empty"><b>예산을 정할 카테고리가 없습니다</b>[카테고리 · 예산]에서 지출 대분류를 먼저 만들어 주세요.</div>';$('#overWarn').classList.add('hide');return;}
   let html='<div class="brow head-row"><div>카테고리</div><div class="r">예산 · 목표</div><div class="r">실적</div><div class="r">남은 금액</div><div>진행률</div></div>';
-  let overs=[];
   const row=(c,lv)=>{
     const b=budgetOf(c.id,curYM), s=spent(c.id,list), left=b-s;
     const goal=(rootOf(c)||{}).type==='saving';        /* 저축은 채울수록 좋다 */
@@ -1392,7 +1414,6 @@ function renderBudgetTree(list){
     const pct=b?Math.max(0,Math.min(s/b*100,100)):0;
     const cls=!b?'':(goal?(minus?'over':(s>=b?'ok':'')):(s>b?'over':(s/b>0.85?'warn':'ok')));
     const leaf=isLeaf(c.id), kid=kids(c.id);
-    if(b&&!goal&&s>b&&leaf) overs.push(c.name);
     const editable=leaf&&db.mode==='monthly';
     html+=`<div class="brow lv${lv} ${minus?'over':(!b?'':(goal?(s>=b?'done':''):(s>b?'over':'')))}" data-cid="${c.id}">
       <div class="bname">${kid.length?`<button class="twist ${open.has(c.id)?'open':''}" data-tw="${c.id}">▶</button>`:'<span style="width:16px;flex:none"></span>'}<span class="txt" title="${esc(c.name)}">${esc(c.name)}</span>${dayBadge(c.id)}</div>
@@ -1406,9 +1427,7 @@ function renderBudgetTree(list){
   };
   tgt.forEach(c=>row(c,1));
   $('#budgetTree').innerHTML=html;
-  const w=$('#overWarn');
-  if(overs.length){w.classList.remove('hide');w.innerHTML='<span>🔔</span><div><b>예산을 넘긴 항목이 '+overs.length+'개 있습니다.</b><br>'+esc(overs.join(', '))+'</div>';}
-  else w.classList.add('hide');
+  paintOverWarn(list);
 }
 
 /* 예산 트리의 금액·막대만 갱신 (입력 중 커서 유지) */
@@ -1433,6 +1452,7 @@ function refreshBudgetRows(){
     row.classList.toggle('over',!!(minus||(b&&!goal&&u>b)));
     row.classList.toggle('done',!!(b&&goal&&!minus&&u>=b));
   });
+  paintOverWarn(list);
 }
 function renderMethods(list){
   const ex=list.filter(t=>typeOf(t.catId)==='expense');
