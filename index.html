@@ -2588,6 +2588,32 @@ function routeOf(o){const k=routeKey(o);
   if(meta.route[k]&&meta.ledgers.some(l=>l.id===meta.route[k]))return meta.route[k];
   meta.route[k]=meta.current; saveMeta();      /* 처음 보는 카드는 지금 가계부로 */
   return meta.current;}
+/* 지금 보고 있지 않은 가계부를 고칠 때 쓴다.
+   이 기기의 사본은 다른 기기가 올린 내용을 모를 수 있으므로,
+   서버에서 최신본을 받아 합친 뒤에 바꾼다. 합치지 못하면 서버에 올리지 않는다. */
+async function patchLedger(lid,change){
+  let o=null;
+  const raw=rawOf(lid);
+  if(raw){try{o=normalize(JSON.parse(raw));}catch(e){o=null;}}
+  let fresh=false;
+  if(cloud){
+    try{
+      const rows=await cloudReq('GET','ledger_docs?id=eq.'+
+        encodeURIComponent(cloud.space+'::'+lid)+'&select=doc');
+      const remote=rows&&rows[0]?rows[0].doc:null;
+      if(remote&&remote.cats)
+        o=o?mergeDoc(o,remote).doc:normalize(JSON.parse(JSON.stringify(remote)));
+      fresh=true;
+    }catch(e){fresh=false;}            /* 서버를 못 읽었으면 이 기기에만 담아 둔다 */
+  }else fresh=true;                    /* 클라우드를 안 쓰면 덮어쓸 상대가 없다 */
+  if(!o)return false;
+  if(change(o)===false)return false;
+  o.updatedAt=Date.now();
+  writeRaw(lid,JSON.stringify(o));
+  if(cloud&&fresh){try{await cloudReq('POST','ledger_docs',
+    [{id:cloud.space+'::'+lid,doc:o,updated_at:Date.now()}]);}catch(e){}}
+  return true;
+}
 async function pullInbox(){
   if(!cloud)return 0;
   let rows=null;
@@ -2616,14 +2642,12 @@ async function pullInbox(){
       if(fresh.length){db.pending=(db.pending||[]).concat(fresh); added+=fresh.length;}
     }else{
       try{
-        const raw=rawOf(lid); if(!raw)continue;
-        const o=normalize(JSON.parse(raw));
-        const have={}; (o.pending||[]).forEach(p=>have[p.key]=1);
-        const fresh=bag[lid].filter(x=>!have[x.key]&&!o.smsDone[x.key]);
-        if(!fresh.length)continue;
-        o.pending=o.pending.concat(fresh); o.updatedAt=Date.now();
-        writeRaw(lid,JSON.stringify(o)); added+=fresh.length;
-        try{await cloudReq('POST','ledger_docs',[{id:cloud.space+'::'+lid,doc:o,updated_at:Date.now()}]);}catch(e){}
+        await patchLedger(lid,o=>{
+          const have={}; o.pending.forEach(p=>have[p.key]=1);
+          const fresh=bag[lid].filter(x=>!have[x.key]&&!o.smsDone[x.key]);
+          if(!fresh.length)return false;
+          o.pending=o.pending.concat(fresh); added+=fresh.length;
+        });
       }catch(e){}
     }
   }
@@ -2965,27 +2989,24 @@ $('#smsList').addEventListener('click',async e=>{
       if(v==='2')batch=same;
       else if(v!=='1'){toast('1 또는 2를 입력해 주세요.','warn');return;}
     }else if(!await ask(`‘${x.shop}’ ${won(x.amt)} 건을\n‘${t.name}’의 대기 목록으로 보냅니다.`,{ok:'보내기'}))return;
-    /* 상대 가계부 데이터에 직접 넣는다 */
-    let o=null;
+    /* 상대 가계부의 최신본을 받아 합친 뒤에 넣는다 */
+    let ok=false;
     try{
-      const raw=rawOf(target); o=raw?normalize(JSON.parse(raw)):null;
-      if(!o){toast('대상 가계부를 찾지 못했습니다.','warn');return;}
-      const have={}; o.pending.forEach(p=>have[p.key]=1);
-      batch.forEach(src=>{
-        /* 보낸 건은 받는 쪽에서 새 건으로 취급한다 — 예전에 처리한 표시에 걸려 사라지지 않도록 */
-        const c=Object.assign({},src,{id:nid('s'),mod:Date.now(),
-          key:src.key+'@'+target+'#'+Date.now().toString(36)});
-        if(!have[c.key]){o.pending.push(c); have[c.key]=1;}
+      ok=await patchLedger(target,o=>{
+        const have={}; o.pending.forEach(p=>have[p.key]=1);
+        batch.forEach(src=>{
+          /* 보낸 건은 받는 쪽에서 새 건으로 취급한다 — 예전에 처리한 표시에 걸려 사라지지 않도록 */
+          const c=Object.assign({},src,{id:nid('s'),mod:Date.now(),
+            key:src.key+'@'+target+'#'+Date.now().toString(36)});
+          if(!have[c.key]){o.pending.push(c); have[c.key]=1;}
+        });
       });
-      o.updatedAt=Date.now();
-      writeRaw(target,JSON.stringify(o));
-    }catch(err){toast('보내지 못했습니다.','warn');return;}
+    }catch(err){ok=false;}
+    if(!ok){toast('보내지 못했습니다.','warn');return;}
     /* 보낸 쪽은 '처리함'으로 남긴다 — 그래야 다른 기기에서 되돌아오지 않는다 */
     const ids={}; batch.forEach(b=>{ids[b.id]=1; db.smsDone[b.key]=Date.now();});
     db.pending=db.pending.filter(p=>!ids[p.id]);
     persist(); renderSMS();
-    if(cloud){try{await cloudReq('POST','ledger_docs',
-      [{id:cloud.space+'::'+target,doc:o,updated_at:Date.now()}]);}catch(e){}}
     toast(batch.length+'건을 ‘'+t.name+'’으로 보냈습니다.','ok');
     return;
   }
