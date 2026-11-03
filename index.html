@@ -942,17 +942,19 @@ grant execute on function add_inbox(text) to anon;</div>
            포함할 텍스트: 신한[^\n]{0,4}\(\d{4}\)|\[신한체크(승인|취소)\]|우리카드\(\d{4}\)
 
 매크로 2   앱: 토스 + 토스뱅크   ← 둘 다 고릅니다
-           포함할 텍스트: 카드 \|
+           포함할 텍스트: 잔액
 
 매크로 3   앱: 카카오톡
            포함할 텍스트: 토스뱅크</div>
           <p class="hint" style="margin:0 0 10px">‘승인’·‘취소’처럼 흔한 단어만 넣으면 광고·예약취소 문자까지 서버로 올라갑니다.
           괄호와 숫자 네 자리를 함께 요구하면 카드사 광고 문자가 걸러집니다.</p>
-          <p class="hint" style="margin:0 0 10px"><b>토스는 ‘원 결제’로 잡으면 안 걸립니다.</b>
-          금액은 알림 <b>제목</b>에만 있고 포함할 텍스트는 보통 <b>본문</b>만 봅니다.
-          본문은 <code>생활비 카드 | 세븐일레븐 신림본점</code> 꼴이라 <code>카드 \|</code>로 잡습니다.
-          그래도 안 걸리면 <code>잔액</code>으로 바꿔 보세요(입금·이체 알림까지 올라오지만 지우면 됩니다).
-          알림에 뜨는 앱 이름이 <b>토스뱅크</b>일 때가 있어 앱은 둘 다 골라 두는 편이 안전합니다.</p>
+          <p class="hint" style="margin:0 0 10px"><b>토스는 ‘원 결제’나 ‘카드 |’로 잡으면 놓칩니다.</b>
+          금액이 알림 <b>제목</b>에만 있는데 포함할 텍스트는 보통 <b>본문</b>만 보고,
+          캐시백이 붙은 날은 제목이 <code>100원 캐시백</code>으로 바뀌면서
+          본문이 <code>7,900원 결제 | ○○마트</code>, <code>잔액 464,832원(생활비 카드)</code> 꼴이 됩니다.
+          두 형태에 공통으로 들어가는 <code>잔액</code>으로 잡아야 다 걸립니다.
+          입금·이체 알림이 함께 올라올 수 있지만 읽지 못한 알림에서 지우면 됩니다.
+          알림에 뜨는 앱 이름이 <b>토스뱅크</b>일 때가 있어 앱은 둘 다 골라 두세요.</p>
           <div class="sqlbox">[꼭 확인할 것]
 알림 소리     조건 없음   ← '소리 없음'이면 아무것도 안 걸립니다
 RegEx 사용    켜기
@@ -2753,6 +2755,11 @@ function parseToss(text){
   const out=[];
   if(/\[토스뱅크\]/.test(text))return out;      /* 카카오톡 알림은 전용 규칙이 맡는다 */
   const lines=text.split(/[\r\n]+/).map(t=>t.trim()).filter(Boolean);
+  /* 캐시백 알림처럼 카드 이름이 잔액 줄 괄호로 밀려나는 형태가 있다
+     — 잔액 464,832원(생활비 카드) */
+  let paren='';
+  lines.forEach(t=>{const m=t.match(/잔액\s*[\d,]+\s*원\s*\(([^)]+)\)/);
+    if(m&&!paren)paren=m[1].trim();});
   lines.forEach((ln,i)=>{
     const m=ln.match(/([\d,]+)\s*원\s*(결제\s*취소|결제|취소|환불)(?:\s*(\d{2})\/(\d{1,2})\/(\d{1,2}))?/);
     if(!m)return;
@@ -2762,9 +2769,10 @@ function parseToss(text){
       let seg=(j===i)?lines[j].slice(m.index+m[0].length):lines[j];
       seg=seg.replace(/잔액[\s\S]*$/,'').trim();
       const q=seg.indexOf('|');
-      if(q>0){card=seg.slice(0,q).trim(); shop=seg.slice(q+1).trim(); break;}
+      if(q>=0){card=seg.slice(0,q).trim(); shop=seg.slice(q+1).trim(); break;}
     }
     if(!shop)return;
+    if(!card)card=paren;                              /* 괄호에서 카드 이름을 가져온다 */
     const o={issuer:'토스',card,shop,amt:+m[1].replace(/,/g,''),
       kind:/취소|환불/.test(m[2])?'취소':'승인'};
     if(m[3])o.date=(2000+ +m[3])+'-'+pad2(+m[4])+'-'+pad2(+m[5]);
