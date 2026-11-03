@@ -2606,13 +2606,13 @@ async function patchLedger(lid,change){
       fresh=true;
     }catch(e){fresh=false;}            /* 서버를 못 읽었으면 이 기기에만 담아 둔다 */
   }else fresh=true;                    /* 클라우드를 안 쓰면 덮어쓸 상대가 없다 */
-  if(!o)return false;
-  if(change(o)===false)return false;
+  if(!o)return 'fail';                 /* 이 기기에도 서버에도 그 가계부가 없다 */
+  if(change(o)===false)return 'nochange';
   o.updatedAt=Date.now();
   writeRaw(lid,JSON.stringify(o));
   if(cloud&&fresh){try{await cloudReq('POST','ledger_docs',
     [{id:cloud.space+'::'+lid,doc:o,updated_at:Date.now()}]);}catch(e){}}
-  return true;
+  return 'ok';
 }
 async function pullInbox(){
   if(!cloud)return 0;
@@ -2633,25 +2633,33 @@ async function pullInbox(){
       if(txt&&!(db.rawin||[]).some(x=>x.body===txt)){
         db.rawin=(db.rawin||[]).concat([{id:nid('r'),body:txt,at:at||Date.now()}]).slice(-30); miss++;}
       return;}
-    got.forEach(o=>{const lid=routeOf(o); (bag[lid]=bag[lid]||[]).push(o);});});
+    got.forEach(o=>{o.row=r.id; const lid=routeOf(o); (bag[lid]=bag[lid]||[]).push(o);});});
   let added=0;
+  const kept=new Set();                /* 넣지 못한 원문 — 서버에서 지우지 않는다 */
   for(const lid of Object.keys(bag)){
+    const items=bag[lid];
+    let st='fail';
     if(lid===meta.current){
       const have={}; (db.pending||[]).forEach(p=>have[p.key]=1);
-      const fresh=bag[lid].filter(o=>!have[o.key]&&!db.smsDone[o.key]);
+      const fresh=items.filter(o=>!have[o.key]&&!db.smsDone[o.key]);
+      fresh.forEach(o=>delete o.row);
       if(fresh.length){db.pending=(db.pending||[]).concat(fresh); added+=fresh.length;}
+      st='ok';
     }else{
       try{
-        await patchLedger(lid,o=>{
+        st=await patchLedger(lid,o=>{
           const have={}; o.pending.forEach(p=>have[p.key]=1);
-          const fresh=bag[lid].filter(x=>!have[x.key]&&!o.smsDone[x.key]);
+          const fresh=items.filter(x=>!have[x.key]&&!o.smsDone[x.key]);
+          fresh.forEach(x=>delete x.row);
           if(!fresh.length)return false;
           o.pending=o.pending.concat(fresh); added+=fresh.length;
         });
-      }catch(e){}
+      }catch(e){st='fail';}
     }
+    if(st==='fail')items.forEach(x=>{if(x.row!==undefined)kept.add(x.row);});
   }
-  try{await cloudReq('DELETE','ledger_inbox?id=in.('+rows.map(r=>r.id).join(',')+')');}catch(e){}
+  const del=rows.map(r=>r.id).filter(id=>!kept.has(id));
+  if(del.length){try{await cloudReq('DELETE','ledger_inbox?id=in.('+del.join(',')+')');}catch(e){}}
   if(added||miss){persist(); renderSMS(); renderRaw(); renderRouteUI();}
   return added;
 }
