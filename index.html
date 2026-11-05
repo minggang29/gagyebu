@@ -2014,6 +2014,16 @@ function shiftMonth(d){const [y,m]=curYM.split('-').map(Number);const dt=new Dat
 $('#mPick').onchange=e=>{if(e.target.value){curYM=e.target.value;resetForm();renderMonth();}};
 
 /* ══════════════ 6. 카테고리 · 예산 ══════════════ */
+/* 같은 부모 아래 형제끼리 한 칸 옮긴다. 목록 순서가 곧 화면 순서다 */
+function moveCat(id,dir){
+  const c=byId(id); if(!c)return;
+  const list=c.parentId?kids(c.parentId):db.cats.filter(x=>!x.parentId&&x.type===c.type);
+  const i=list.indexOf(c), j=i+dir;
+  if(i<0||j<0||j>=list.length)return;
+  const a=db.cats.indexOf(c), b=db.cats.indexOf(list[j]);
+  db.cats[a]=list[j]; db.cats[b]=c;
+  persist(); renderSetup(); renderMonth();
+}
 function renderSetup(){
   $$('#modeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.m===db.mode));
   const mm=db.mode==='monthly';
@@ -2027,7 +2037,7 @@ function renderSetup(){
     if(!$('#addBox').classList.contains('hide')){fillMv(); fillAd();}}
   $('#sPick').value=curYM;
   let html='';
-  const node=(c,lv)=>{
+  const node=(c,lv,first,last)=>{
     const k=kids(c.id), leaf=!k.length, t=rootOf(c).type;
     html+=`<div class="cnode lv${lv}" style="padding-left:${(lv-1)*22}px">
       ${lv===1?`<span class="tag ${TYPE[t].cls}">${TYPE[t].label}</span>`:'<span style="color:var(--muted);font-size:11px">'+(lv===2?'중':'소')+'</span>'}
@@ -2036,13 +2046,15 @@ function renderSetup(){
         :leaf?`<input class="binput num" style="width:124px" type="number" min="0" step="1000" data-fbud="${c.id}" value="${leafBudget(c.id,curYM)||''}" placeholder="예산 없음">`
              :`<span class="subtot num" data-sub="${c.id}" title="하위 항목 합계">${budgetOf(c.id,curYM)?won(budgetOf(c.id,curYM)):'—'}</span>`}
       ${lv<3?`<button class="btn sm" data-add="${c.id}">하위 추가</button>`:''}
+      <button class="btn ico" data-cup="${c.id}" title="한 칸 위로" aria-label="한 칸 위로"${first?' disabled':''}>${ICON.up}</button>
+      <button class="btn ico" data-cdn="${c.id}" title="한 칸 아래로" aria-label="한 칸 아래로"${last?' disabled':''}>${ICON.down}</button>
       <button class="btn sm ghost" data-rm="${c.id}">삭제</button></div>`;
-    k.forEach(x=>node(x,lv+1));
+    k.forEach((x,i)=>node(x,lv+1,i===0,i===k.length-1));
   };
   ['expense','saving','income'].forEach(t=>{
     const r=roots(t); if(!r.length)return;
     html+=`<div style="margin:18px 0 6px;font-size:11.5px;font-weight:800;color:var(--muted);letter-spacing:.06em">${TYPE[t].label.toUpperCase()}</div>`;
-    r.forEach(c=>node(c,1));
+    r.forEach((c,i)=>node(c,1,i===0,i===r.length-1));
   });
   $('#catEditor').innerHTML=html||'<div class="empty"><b>카테고리가 없습니다</b>위에서 대분류를 추가해 주세요.</div>';
   $('#methodChips').innerHTML=db.methods.map(m=>
@@ -2122,6 +2134,9 @@ $('#addRoot').onclick=()=>{const n=$('#newRootName').value.trim(); if(!n){toast(
   persist(); renderSetup(); refreshSelects();};
 $('#newRootName').addEventListener('keydown',e=>{if(e.key==='Enter')$('#addRoot').click();});
 $('#catEditor').addEventListener('click',async e=>{
+  const up=e.target.closest('[data-cup]'), dn=e.target.closest('[data-cdn]');
+  if(up){moveCat(up.dataset.cup,-1); return;}
+  if(dn){moveCat(dn.dataset.cdn,1); return;}
   const a=e.target.closest('[data-add]'), r=e.target.closest('[data-rm]');
   if(a){const par=byId(a.dataset.add);
     const n=await askText('‘'+(par?par.name:'')+'’ 아래에 추가할 분류 이름을 입력하세요.',{placeholder:'예: 카페·간식'});
