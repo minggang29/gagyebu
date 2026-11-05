@@ -1449,7 +1449,7 @@ function overList(list){
     kids(c.id).forEach(k=>{if(walk(k))deep=true;});
     const goal=(rootOf(c)||{}).type==='saving';       /* 저축은 넘겨도 좋은 것 */
     const b=budgetOf(c.id,curYM), s=spent(c.id,list);
-    const over=!!b&&!goal&&s>b;
+    const over=!goal&&s>0&&(b?s>b:true);        /* 예산을 안 잡은 채 쓴 것도 초과로 본다 */
     if(over&&!deep)out.push(c.name);
     return over||deep;
   };
@@ -1521,7 +1521,7 @@ function renderWeek(list){
     const cur=thisMonth&&td>=r.s&&td<=r.e;
     const future=thisMonth?td<r.s:(new Date(y,m-1,r.s)>now);
     const pct=r.avail>0?Math.round(r.used/r.avail*100):(r.used?100:0);
-    const over=r.avail>0&&r.used>r.avail;
+    const over=r.used>0&&r.left<0;
     const carry=r.n>1&&r.carry!==0
       ?`<span class="wcarry ${r.carry<0?'minus':''}">${r.carry>0?'+':'−'}${won(Math.abs(r.carry))} 이월</span>`:'';
     return `<div class="wrow${cur?' now':''}${future?' later':''}${over?' over':''}" data-wk="${r.n}">
@@ -1531,7 +1531,7 @@ function renderWeek(list){
       <div class="wused num">${won(r.used)}</div>
       <div class="wleft num ${r.left<0?'up':'ok'}">${r.left<0?'−'+won(-r.left):won(r.left)}</div>
       <div class="wbar"><div class="bar"><i style="width:${Math.min(100,pct)}%"></i></div>
-        <span>${r.avail?pct+'%':'예산 없음'}${over?' · 초과':''}</span></div>
+        <span>${r.avail>0?pct+'%':(over?'예산 밖':'예산 없음')}${over?' · 초과':''}</span></div>
     </div>`;
   }).join('')+(()=>{
     const b=rows.reduce((a,r)=>a+r.budget,0), u=rows.reduce((a,r)=>a+r.used,0);
@@ -1551,17 +1551,18 @@ function renderBudgetTree(list){
     const b=budgetOf(c.id,curYM), s=spent(c.id,list), left=b-s;
     const goal=(rootOf(c)||{}).type==='saving';        /* 저축은 채울수록 좋다 */
     const minus=goal&&s<0;                             /* 넣은 것보다 뺀 게 많은 달 */
-    const pct=b?Math.max(0,Math.min(s/b*100,100)):0;
-    const cls=!b?'':(goal?(minus?'over':(s>=b?'ok':'')):(s>b?'over':(s/b>0.85?'warn':'ok')));
+    const free=!b&&!goal&&s>0;                         /* 예산을 안 잡았는데 쓴 돈 */
+    const pct=b?Math.max(0,Math.min(s/b*100,100)):(free?100:0);
+    const cls=!b?(free?'over':''):(goal?(minus?'over':(s>=b?'ok':'')):(s>b?'over':(s/b>0.85?'warn':'ok')));
     const leaf=isLeaf(c.id), kid=kids(c.id);
     const editable=leaf&&db.mode==='monthly';
-    html+=`<div class="brow lv${lv} ${minus?'over':(!b?'':(goal?(s>=b?'done':''):(s>b?'over':'')))}" data-cid="${c.id}">
+    html+=`<div class="brow lv${lv} ${minus||free?'over':(!b?'':(goal?(s>=b?'done':''):(s>b?'over':'')))}" data-cid="${c.id}">
       <div class="bname">${kid.length?`<button class="twist ${open.has(c.id)?'open':''}" data-tw="${c.id}">▶</button>`:'<span style="width:16px;flex:none"></span>'}<span class="txt" title="${esc(c.name)}">${esc(c.name)}</span>${dayBadge(c.id)}</div>
       <div class="r"><span class="mlbl">예산</span>${editable?`<input class="binput num" type="number" min="0" step="1000" data-bud="${c.id}" value="${leafBudget(c.id,curYM)||''}" placeholder="0">`:`<span class="num" style="${b?'':'color:var(--muted)'}">${b?won(b):'—'}</span>`}</div>
       <div class="r num"${s<0?' style="color:var(--out);font-weight:700"':''}><span class="mlbl">실적</span>${s?won(s):'<span style="color:var(--muted)">—</span>'}</div>
-      <div class="r num" style="color:${minus?'var(--out)':(!b?'var(--muted)':(goal?(left<=0?'var(--in)':'var(--save)'):(left<0?'var(--out)':'var(--in)')))};font-weight:${b||minus?700:400}"><span class="mlbl">${goal?'목표까지':'남음'}</span>${minus?won(left)+' 필요':(!b?'—':(goal?(left<=0?won(-left)+' 초과':won(left)):(left<0?'−'+won(-left):won(left))))}</div>
-      <div class="barwrap"><div class="bar"><i class="${cls}" style="width:${b?pct:0}%"></i></div>
-        <div class="bmeta"><span>${minus?'0%':(b?Math.round(s/b*100)+'%':(goal?'목표 없음':'예산 없음'))}</span><span>${minus?'순인출':(!b?'':(goal?(s>=b?'목표 달성':''):(s>b?'초과':'')))}</span></div></div>
+      <div class="r num" style="color:${minus||free?'var(--out)':(!b?'var(--muted)':(goal?(left<=0?'var(--in)':'var(--save)'):(left<0?'var(--out)':'var(--in)')))};font-weight:${b||minus||free?700:400}"><span class="mlbl">${goal?'목표까지':'남음'}</span>${minus?won(left)+' 필요':(free?'−'+won(s):(!b?'—':(goal?(left<=0?won(-left)+' 초과':won(left)):(left<0?'−'+won(-left):won(left)))))}</div>
+      <div class="barwrap"><div class="bar"><i class="${cls}" style="width:${pct}%"></i></div>
+        <div class="bmeta"><span>${minus?'0%':(b?Math.round(s/b*100)+'%':(free?'예산 밖':(goal?'목표 없음':'예산 없음')))}</span><span>${minus?'순인출':(free?'초과':(!b?'':(goal?(s>=b?'목표 달성':''):(s>b?'초과':''))))}</span></div></div>
     </div>`;
     if(open.has(c.id)) kid.forEach(k=>row(k,Math.min(lv+1,3)));
   };
@@ -1576,20 +1577,21 @@ function refreshBudgetRows(){
   $$('#budgetTree .brow[data-cid]').forEach(row=>{
     const id=row.dataset.cid, b=budgetOf(id,curYM), u=spent(id,list), left=b-u;
     const goal=(rootOf(byId(id))||{}).type==='saving', minus=goal&&u<0;
+    const free=!b&&!goal&&u>0;
     const cells=row.children;
     const L=t=>`<span class="mlbl">${t}</span>`;
     if(!row.querySelector('[data-bud]'))cells[1].innerHTML=L('예산')+`<span class="num" style="${b?'':'color:var(--muted)'}">${b?won(b):'—'}</span>`;
     cells[2].style.color=u<0?'var(--out)':''; cells[2].style.fontWeight=u<0?700:'';
     cells[2].innerHTML=L('실적')+(u?won(u):'<span style="color:var(--muted)">—</span>');
-    cells[3].style.color=minus?'var(--out)':(!b?'var(--muted)':(goal?(left<=0?'var(--in)':'var(--save)'):(left<0?'var(--out)':'var(--in)')));
-    cells[3].style.fontWeight=(b||minus)?700:400;
-    cells[3].innerHTML=L(goal?'목표까지':'남음')+(minus?won(left)+' 필요':(!b?'—':(goal?(left<=0?won(-left)+' 초과':won(left)):(left<0?'−'+won(-left):won(left)))));
+    cells[3].style.color=minus||free?'var(--out)':(!b?'var(--muted)':(goal?(left<=0?'var(--in)':'var(--save)'):(left<0?'var(--out)':'var(--in)')));
+    cells[3].style.fontWeight=(b||minus||free)?700:400;
+    cells[3].innerHTML=L(goal?'목표까지':'남음')+(minus?won(left)+' 필요':(free?'−'+won(u):(!b?'—':(goal?(left<=0?won(-left)+' 초과':won(left)):(left<0?'−'+won(-left):won(left))))));
     const bar=cells[4].querySelector('.bar i'), meta=cells[4].querySelectorAll('.bmeta span');
-    bar.style.width=(b?Math.max(0,Math.min(u/b*100,100)):0)+'%';
-    bar.className=!b?'':(goal?(minus?'over':(u>=b?'ok':'')):(u>b?'over':(u/b>0.85?'warn':'ok')));
-    meta[0].textContent=minus?'0%':(b?Math.round(u/b*100)+'%':(goal?'목표 없음':'예산 없음'));
-    meta[1].textContent=minus?'순인출':(!b?'':(goal?(u>=b?'목표 달성':''):(u>b?'초과':'')));
-    row.classList.toggle('over',!!(minus||(b&&!goal&&u>b)));
+    bar.style.width=(b?Math.max(0,Math.min(u/b*100,100)):(free?100:0))+'%';
+    bar.className=!b?(free?'over':''):(goal?(minus?'over':(u>=b?'ok':'')):(u>b?'over':(u/b>0.85?'warn':'ok')));
+    meta[0].textContent=minus?'0%':(b?Math.round(u/b*100)+'%':(free?'예산 밖':(goal?'목표 없음':'예산 없음')));
+    meta[1].textContent=minus?'순인출':(free?'초과':(!b?'':(goal?(u>=b?'목표 달성':''):(u>b?'초과':''))));
+    row.classList.toggle('over',!!(minus||free||(b&&!goal&&u>b)));
     row.classList.toggle('done',!!(b&&goal&&!minus&&u>=b));
   });
   paintOverWarn(list);
@@ -1983,14 +1985,14 @@ function refreshWeekRows(){
   rows.forEach(r=>{
     const el=$('#weekBox').querySelector('.wrow[data-wk="'+r.n+'"]'); if(!el)return;
     const pct=r.avail>0?Math.round(r.used/r.avail*100):(r.used?100:0);
-    const over=r.avail>0&&r.used>r.avail;
+    const over=r.used>0&&r.left<0;
     el.classList.toggle('over',over);
     el.querySelector('.wused').textContent=won(r.used);
     const lf=el.querySelector('.wleft');
     lf.textContent=r.left<0?'−'+won(-r.left):won(r.left);
     lf.className='wleft num '+(r.left<0?'up':'ok');
     el.querySelector('.wbar i').style.width=Math.min(100,pct)+'%';
-    el.querySelector('.wbar span').textContent=(r.avail?pct+'%':'예산 없음')+(over?' · 초과':'');
+    el.querySelector('.wbar span').textContent=(r.avail>0?pct+'%':(over?'예산 밖':'예산 없음'))+(over?' · 초과':'');
     const c=el.querySelector('.wcarry');
     if(r.n>1&&r.carry!==0){
       const t=(r.carry>0?'+':'−')+won(Math.abs(r.carry))+' 이월';
