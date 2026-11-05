@@ -93,7 +93,7 @@ h1,h2,h3,h4{margin:0; letter-spacing:-.02em}
 .monthnav input{border:0; background:transparent; font-weight:700; font-size:15px; text-align:center; width:130px; outline:none}
 .monthnav.sm{padding:3px; border-radius:9px}
 .monthnav.sm button{width:26px; height:26px; font-size:13px}
-.monthnav.sm input{font-size:13px; width:118px}
+.monthnav.sm input{font-size:13px; width:128px}
 
 /* ── Cards ────────────────────────────── */
 .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:var(--shadow); padding:20px 22px; margin-bottom:18px}
@@ -816,10 +816,16 @@ code{background:var(--surface-2); border:1px solid var(--line-2); border-radius:
 
       <div class="card" id="sec-week">
         <div class="card-head">
-          <h3>주차별 예산</h3>
-          <div class="row"><select id="weekCat" style="width:auto;min-width:120px"></select></div>
+          <div class="row" style="gap:12px">
+            <h3 id="weekTitle">주차별 예산</h3>
+            <div class="monthnav sm">
+              <button id="wPrev" title="이전 달">‹</button>
+              <input type="month" id="wPick">
+              <button id="wNext" title="다음 달">›</button>
+            </div>
+          </div>
         </div>
-        <p class="sub">한 달 예산을 주 단위로 나눠 씁니다. 월요일에 시작해 일요일에 끝나는 주로 끊고,
+        <p class="sub" id="weekSub">한 달 예산을 주 단위로 나눠 씁니다. 월요일에 시작해 일요일에 끝나는 주로 끊고,
         안 쓰고 남은 돈은 다음 주로 넘어갑니다.</p>
         <div id="weekBox"></div>
       </div>
@@ -1413,8 +1419,10 @@ $('#calendar').addEventListener('click',async e=>{
   toast(t?'메모를 저장했습니다.':'메모를 지웠습니다.');
 });
 /* 달력에서 달을 바꿀 때, 위쪽 카드 높이가 달라져도 달력이 제자리에 머물게 한다 */
-function keepCal(fn){
-  const el=$('#sec-cal');
+const keepCal=fn=>keepAt('#sec-cal',fn);
+/* 위쪽 카드의 높이가 달라져도 보던 카드가 제자리에 있게 한다 */
+function keepAt(sel,fn){
+  const el=$(sel);
   if(!el)return fn();
   const before=el.getBoundingClientRect().top;
   fn();
@@ -1488,15 +1496,18 @@ function weekRows(list){
   });
 }
 function renderWeek(list){
-  const card=$('#sec-week'), box=$('#weekBox'), sel=$('#weekCat');
+  const card=$('#sec-week'), box=$('#weekBox');
   const tops=roots('expense');
   if(!tops.length){card.classList.add('hide'); return;}
   card.classList.remove('hide');
   if(!db.weekCat||!tops.some(c=>c.id===db.weekCat))
     db.weekCat=(tops.find(c=>c.name.indexOf('변동')>=0)||tops[0]).id;
-  sel.innerHTML=tops.map(c=>`<option value="${c.id}"${c.id===db.weekCat?' selected':''}>${esc(c.name)}</option>`).join('');
   const rows=weekRows(list);
   const [y,m]=curYM.split('-').map(Number);
+  $('#weekTitle').textContent=y+'년 '+m+'월 주차별 예산';
+  $('#wPick').value=curYM;
+  $('#weekSub').textContent='‘'+(byId(db.weekCat)||{}).name+'’을 주 단위로 나눠 씁니다. '+
+    '월요일에 시작해 일요일에 끝나는 주로 끊고, 안 쓰고 남은 돈은 다음 주로 넘어갑니다.';
   const now=new Date(), thisMonth=(now.getFullYear()===y&&now.getMonth()+1===m);
   const td=now.getDate();
   const span=w=>w.s===w.e?m+'/'+w.s:m+'/'+w.s+'–'+m+'/'+w.e;
@@ -1958,7 +1969,10 @@ $('#weekBox').addEventListener('input',e=>{
   setWkBudget(curYM,Number(i.dataset.wb),Number(i.value)||0);
   persist(); refreshWeekRows();
 });
-$('#weekCat').onchange=e=>{db.weekCat=e.target.value; persist(); renderWeek(txOf(curYM));};
+$('#wPrev').onclick=()=>keepAt('#sec-week',()=>shiftMonth(-1));
+$('#wNext').onclick=()=>keepAt('#sec-week',()=>shiftMonth(1));
+$('#wPick').onchange=e=>{if(e.target.value)keepAt('#sec-week',()=>{
+  curYM=e.target.value; resetForm(); renderMonth();});};
 /* 입력칸에 손을 대는 중이므로 숫자와 막대만 고쳐 그린다 */
 function refreshWeekRows(){
   const rows=weekRows(txOf(curYM));
