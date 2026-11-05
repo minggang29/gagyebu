@@ -308,6 +308,41 @@ code{background:var(--surface-2); border:1px solid var(--line-2); border-radius:
 .tdcat .path{margin-top:1px}
 
 /* ── Budget tree (signature) ──────────── */
+/* 주차별 예산 */
+.wrow,.wsum{display:grid; grid-template-columns:minmax(150px,1fr) 160px 120px 130px minmax(170px,230px);
+  gap:14px; align-items:center; padding:10px 6px; border-bottom:1px solid var(--line-2)}
+.wrow > div,.wsum > div{min-width:0}
+.wsum{border-bottom:0; border-top:1px solid var(--line); margin-top:3px; font-weight:800}
+.wrow.head-row{border-bottom:1px solid var(--line); padding:0 6px 8px}
+.wrow.head-row > div{font-size:11.5px; color:var(--muted); font-weight:700}
+.wrow.head-row:hover{background:transparent}
+.wrow.head-row .wused,.wrow.head-row .wleft{text-align:right; font-weight:700}
+.wrow:hover{background:var(--surface-2)}
+.wrow.now{background:var(--save-soft); border-radius:9px}
+.wrow.later{opacity:.52}
+.wrow.over{background:linear-gradient(90deg,var(--out-soft),transparent 65%)}
+.wrow.now.over{background:linear-gradient(90deg,var(--out-soft),var(--save-soft) 70%)}
+.wlbl b{font-size:14px}
+.wlbl span{display:block; font-size:11.5px; color:var(--muted); font-weight:700; margin-top:1px}
+.wbud input{width:100%; text-align:right}
+.wcarry{display:block; font-size:11px; font-weight:700; color:var(--in); margin-top:3px; text-align:right}
+.wcarry.minus{color:var(--out)}
+.wnote{display:block; font-size:11px; color:var(--muted); font-weight:700; margin-top:2px}
+.wused,.wleft{text-align:right; font-weight:800}
+.wleft.ok{color:var(--in)}
+.wleft.up{color:var(--out)}
+.wbar span{display:block; font-size:11.5px; color:var(--muted); font-weight:700; margin-top:4px}
+@media (max-width:900px){
+  .wrow,.wsum{grid-template-columns:1fr 1fr; gap:6px 10px; padding:12px 4px}
+  .wrow.head-row{display:none}                /* 좁은 화면에서는 값마다 이름을 붙인다 */
+  .wrow .wlbl,.wsum .wlbl,.wrow .wbud,.wsum .wbud,
+  .wrow .wbar,.wsum .wbar{grid-column:1/-1}
+  .wcarry{text-align:left}
+  .wused{text-align:left}
+  .wused::before,.wleft::before{font-size:11px; color:var(--muted); font-weight:700}
+  .wused::before{content:'쓴 돈 '}
+  .wleft::before{content:'남음 '}
+}
 .brow{display:grid; grid-template-columns:minmax(220px,1fr) 130px 130px 140px minmax(190px,240px); gap:14px; align-items:center; padding:9px 6px; border-bottom:1px solid var(--line-2)}
 .brow.head-row{border-bottom:1px solid var(--line); padding-bottom:9px}
 .brow.head-row > div{font-size:11.5px; color:var(--muted); font-weight:700}
@@ -666,7 +701,7 @@ code{background:var(--surface-2); border:1px solid var(--line-2); border-radius:
       <button data-go="sec-sms">문자로 기록 추가</button>
       <div class="subrow"><button data-go="sec-fixed">고정 일정</button><span class="sd">·</span><button data-go="sec-card">카드 결제</button></div>
       <button data-go="sec-cal">지출 달력</button>
-      <button data-go="sec-budget">예산 대비 지출</button>
+      <div class="subrow"><button data-go="sec-budget">예산 대비</button><span class="sd">·</span><button data-go="sec-week">주차별</button></div>
       <div class="subrow"><button data-go="sec-method">결제 수단별</button><span class="sd">·</span><button data-go="sec-mix">지출 구성</button></div>
       <button data-go="sec-tx">거래 내역</button>
     </div>
@@ -777,6 +812,16 @@ code{background:var(--surface-2); border:1px solid var(--line-2); border-radius:
           <div class="row"><span class="hint" id="budgetModeHint"></span></div>
         </div>
         <div id="budgetTree"></div>
+      </div>
+
+      <div class="card" id="sec-week">
+        <div class="card-head">
+          <h3>주차별 예산</h3>
+          <div class="row"><select id="weekCat" style="width:auto;min-width:120px"></select></div>
+        </div>
+        <p class="sub">한 달 예산을 주 단위로 나눠 씁니다. 월요일에 시작해 일요일에 끝나는 주로 끊고,
+        안 쓰고 남은 돈은 다음 주로 넘어갑니다.</p>
+        <div id="weekBox"></div>
       </div>
 
       <div class="grid2">
@@ -1087,7 +1132,7 @@ function curLedger(){return meta.ledgers.find(l=>l.id===meta.current)||meta.ledg
 function rawOf(id){try{return canStore?localStorage.getItem(dbKey(id)):(mem[id]||null);}catch(e){return null;}}
 function writeRaw(id,str){if(canStore){try{localStorage.setItem(dbKey(id),str);}catch(e){}}else mem[id]=str;}
 let lastSig='';
-function setSig(d){return JSON.stringify([d.cats,d.fixed,d.monthly,d.methods,d.recurring,d.recurLog,d.cardDay,d.mode,d.budgetLog,d.notes,d.rules,d.cardMap]);}
+function setSig(d){return JSON.stringify([d.cats,d.fixed,d.monthly,d.methods,d.recurring,d.recurLog,d.cardDay,d.mode,d.budgetLog,d.notes,d.rules,d.cardMap,d.weekly,d.weekCat]);}
 function persist(){
   const sig=setSig(db);
   if(sig!==lastSig){db.setAt=Date.now(); lastSig=sig; delete db.seeded;}  /* 설정이 바뀐 순간만 기록 */
@@ -1275,6 +1320,7 @@ function renderMonth(){
   renderSMS();
   renderCalendar(list);
   renderBudgetTree(list);
+  renderWeek(list);
   renderRecurCard();
   renderCardPay();
   renderMethods(list);
@@ -1404,6 +1450,83 @@ function paintOverWarn(list){
   if(overs.length){w.classList.remove('hide');
     w.innerHTML='<span>🔔</span><div><b>예산을 넘긴 항목이 '+overs.length+'개 있습니다.</b><br>'+esc(overs.join(', '))+'</div>';}
   else w.classList.add('hide');
+}
+/* 그 달을 월~일 주로 끊는다. 달 밖으로 나가는 날은 잘라낸다 */
+function weeksOf(ym){
+  const [y,m]=ym.split('-').map(Number);
+  const last=new Date(y,m,0).getDate(), out=[];
+  let d=1;
+  while(d<=last){
+    const dow=new Date(y,m-1,d).getDay();          /* 0=일요일 */
+    const end=Math.min(last,d+(dow===0?0:7-dow));  /* 그 주 일요일까지 */
+    out.push({s:d,e:end});
+    d=end+1;
+  }
+  return out;
+}
+const wkBudget=(ym,i)=>((db.weekly||{})[ym]||{})[i]||0;
+function setWkBudget(ym,i,v){
+  db.weekly=db.weekly||{};
+  const o=db.weekly[ym]=db.weekly[ym]||{};
+  if(v)o[i]=v; else delete o[i];
+  if(!Object.keys(o).length)delete db.weekly[ym];
+}
+/* 고른 대분류의 주차별 예산·지출·이월을 계산한다 */
+function weekRows(list){
+  const top=db.weekCat, set=new Set(descend(top));
+  const day=t=>Number(t.date.slice(8,10));
+  return weeksOf(curYM).map((w,i)=>{
+    const n=i+1;
+    const used=list.filter(t=>set.has(t.catId)&&day(t)>=w.s&&day(t)<=w.e)
+                   .reduce((a,t)=>a+t.amount,0);
+    return {n,s:w.s,e:w.e,budget:wkBudget(curYM,n),used};
+  }).map((r,i,all)=>{                              /* 남은 돈을 다음 주로 넘긴다 */
+    r.carry=i?all[i-1].left:0;
+    r.avail=r.budget+r.carry;
+    r.left=r.avail-r.used;
+    return r;
+  });
+}
+function renderWeek(list){
+  const card=$('#sec-week'), box=$('#weekBox'), sel=$('#weekCat');
+  const tops=roots('expense');
+  if(!tops.length){card.classList.add('hide'); return;}
+  card.classList.remove('hide');
+  if(!db.weekCat||!tops.some(c=>c.id===db.weekCat))
+    db.weekCat=(tops.find(c=>c.name.indexOf('변동')>=0)||tops[0]).id;
+  sel.innerHTML=tops.map(c=>`<option value="${c.id}"${c.id===db.weekCat?' selected':''}>${esc(c.name)}</option>`).join('');
+  const rows=weekRows(list);
+  const [y,m]=curYM.split('-').map(Number);
+  const now=new Date(), thisMonth=(now.getFullYear()===y&&now.getMonth()+1===m);
+  const td=now.getDate();
+  const span=w=>w.s===w.e?m+'/'+w.s:m+'/'+w.s+'–'+m+'/'+w.e;
+  const head=`<div class="wrow head-row"><div>주차</div><div style="text-align:right">예산</div>
+    <div class="wused">쓴 돈</div><div class="wleft">남은 돈</div><div>사용률</div></div>`;
+  box.innerHTML=head+rows.map(r=>{
+    const cur=thisMonth&&td>=r.s&&td<=r.e;
+    const future=thisMonth?td<r.s:(new Date(y,m-1,r.s)>now);
+    const pct=r.avail>0?Math.round(r.used/r.avail*100):(r.used?100:0);
+    const over=r.avail>0&&r.used>r.avail;
+    const carry=r.n>1&&r.carry!==0
+      ?`<span class="wcarry ${r.carry<0?'minus':''}">${r.carry>0?'+':'−'}${won(Math.abs(r.carry))} 이월</span>`:'';
+    return `<div class="wrow${cur?' now':''}${future?' later':''}${over?' over':''}" data-wk="${r.n}">
+      <div class="wlbl"><b>${r.n}주차</b><span>${span(r)}${cur?' · 이번 주':''}</span></div>
+      <div class="wbud"><input class="binput num" type="number" min="0" step="1000"
+        data-wb="${r.n}" placeholder="예산" value="${r.budget||''}">${carry}</div>
+      <div class="wused num">${won(r.used)}</div>
+      <div class="wleft num ${r.left<0?'up':'ok'}">${r.left<0?'−'+won(-r.left):won(r.left)}</div>
+      <div class="wbar"><div class="bar"><i style="width:${Math.min(100,pct)}%"></i></div>
+        <span>${r.avail?pct+'%':'예산 없음'}${over?' · 초과':''}</span></div>
+    </div>`;
+  }).join('')+(()=>{
+    const b=rows.reduce((a,r)=>a+r.budget,0), u=rows.reduce((a,r)=>a+r.used,0);
+    const nm=byId(db.weekCat), mb=nm?budgetOf(nm.id,curYM):0;
+    return `<div class="wsum"><div class="wlbl"><b>합계</b><span>${rows.length}주</span></div>
+      <div class="wbud num">${won(b)}${mb&&mb!==b?`<span class="wnote">월 예산 ${won(mb)}</span>`:''}</div>
+      <div class="wused num">${won(u)}</div>
+      <div class="wleft num ${b-u<0?'up':'ok'}">${b-u<0?'−'+won(u-b):won(b-u)}</div>
+      <div class="wbar"><span class="wnote">주차 예산 합계와 지출입니다.</span></div></div>`;
+  })();
 }
 function renderBudgetTree(list){
   const tgt=roots().filter(c=>c.type!=='income');
@@ -1830,6 +1953,41 @@ $('#budgetTree').addEventListener('click',e=>{const tw=e.target.closest('[data-t
 $('#budgetTree').addEventListener('input',e=>{const i=e.target.closest('[data-bud]');if(!i)return;
   setBudget(i.dataset.bud,curYM,Number(i.value)||0); persist(); refreshBudgetRows();});
 $('#budgetTree').addEventListener('change',e=>{if(e.target.closest('[data-bud]'))renderMonth();});
+$('#weekBox').addEventListener('input',e=>{
+  const i=e.target.closest('[data-wb]'); if(!i)return;
+  setWkBudget(curYM,Number(i.dataset.wb),Number(i.value)||0);
+  persist(); refreshWeekRows();
+});
+$('#weekCat').onchange=e=>{db.weekCat=e.target.value; persist(); renderWeek(txOf(curYM));};
+/* 입력칸에 손을 대는 중이므로 숫자와 막대만 고쳐 그린다 */
+function refreshWeekRows(){
+  const rows=weekRows(txOf(curYM));
+  rows.forEach(r=>{
+    const el=$('#weekBox').querySelector('.wrow[data-wk="'+r.n+'"]'); if(!el)return;
+    const pct=r.avail>0?Math.round(r.used/r.avail*100):(r.used?100:0);
+    const over=r.avail>0&&r.used>r.avail;
+    el.classList.toggle('over',over);
+    el.querySelector('.wused').textContent=won(r.used);
+    const lf=el.querySelector('.wleft');
+    lf.textContent=r.left<0?'−'+won(-r.left):won(r.left);
+    lf.className='wleft num '+(r.left<0?'up':'ok');
+    el.querySelector('.wbar i').style.width=Math.min(100,pct)+'%';
+    el.querySelector('.wbar span').textContent=(r.avail?pct+'%':'예산 없음')+(over?' · 초과':'');
+    const c=el.querySelector('.wcarry');
+    if(r.n>1&&r.carry!==0){
+      const t=(r.carry>0?'+':'−')+won(Math.abs(r.carry))+' 이월';
+      if(c){c.textContent=t; c.classList.toggle('minus',r.carry<0);}
+      else el.querySelector('.wbud').insertAdjacentHTML('beforeend',
+        '<span class="wcarry'+(r.carry<0?' minus':'')+'">'+t+'</span>');
+    }else if(c)c.remove();
+  });
+  const sum=$('#weekBox').querySelector('.wsum'); if(!sum)return;
+  const b=rows.reduce((a,r)=>a+r.budget,0), u=rows.reduce((a,r)=>a+r.used,0);
+  sum.querySelector('.wbud').firstChild.nodeValue=won(b);
+  const sl=sum.querySelector('.wleft');
+  sl.textContent=b-u<0?'−'+won(u-b):won(b-u);
+  sl.className='wleft num '+(b-u<0?'up':'ok');
+}
 $('#mPrev').onclick=()=>shiftMonth(-1); $('#mNext').onclick=()=>shiftMonth(1);
 function shiftMonth(d){const [y,m]=curYM.split('-').map(Number);const dt=new Date(y,m-1+d,1);
   curYM=dt.getFullYear()+'-'+pad(dt.getMonth()+1); resetForm(); renderMonth();}
@@ -2294,7 +2452,7 @@ async function writeFile(){
   renderFsUI();
 }
 function normalize(d){d.monthly=d.monthly||{};d.fixed=d.fixed||{};d.txs=d.txs||[];d.methods=d.methods||[];
-  d.recurring=d.recurring||[];d.recurLog=d.recurLog||{};d.cardDay=d.cardDay||14;d.tomb=d.tomb||{};d.budgetLog=d.budgetLog||{};d.notes=d.notes||{};d.pending=d.pending||[];d.rules=d.rules||{};d.cardMap=d.cardMap||{};d.smsDone=d.smsDone||{};d.rawin=d.rawin||[];
+  d.recurring=d.recurring||[];d.recurLog=d.recurLog||{};d.cardDay=d.cardDay||14;d.tomb=d.tomb||{};d.budgetLog=d.budgetLog||{};d.notes=d.notes||{};d.pending=d.pending||[];d.rules=d.rules||{};d.cardMap=d.cardMap||{};d.smsDone=d.smsDone||{};d.rawin=d.rawin||[];d.weekly=d.weekly||{};
   if(d.seeded&&(d.txs.length||d.recurring.length))delete d.seeded;
   if(typeof d.setAt!=='number')d.setAt=d.seeded?0:(d.updatedAt||1);
   /* 예전 기록에 정렬 순번 부여 (같은 날짜 안에서 기존 입력 순서 유지) */
@@ -2505,7 +2663,7 @@ function mergeDoc(local,remote){
   out.rawin=Object.keys(rw).map(k=>rw[k]).sort((a,b)=>(a.at||0)-(b.at||0)).slice(-30);
   /* 설정: 나중에 고친 쪽을 통째로 사용 */
   if(!remote.seeded&&(remote.setAt||0)>(local.setAt||0)){
-    ['cats','fixed','monthly','methods','recurring','recurLog','cardDay','mode','budgetLog','notes','rules','cardMap'].forEach(k=>{
+    ['cats','fixed','monthly','methods','recurring','recurLog','cardDay','mode','budgetLog','notes','rules','cardMap','weekly','weekCat'].forEach(k=>{
       if(remote[k]!==undefined)out[k]=remote[k];});
     out.setAt=remote.setAt; delete out.seeded;
   }
