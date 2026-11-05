@@ -41,7 +41,7 @@ button{cursor:pointer}
 h1,h2,h3,h4{margin:0; letter-spacing:-.02em}
 
 /* ── Layout ───────────────────────────── */
-.app{display:grid; grid-template-columns:232px 1fr; min-height:100vh}
+.app{display:grid; grid-template-columns:232px minmax(0,1fr); min-height:100vh}
 .side{background:var(--surface); border-right:1px solid var(--line)}
 .sidein{position:sticky; top:0; min-height:100vh; max-height:100vh; overflow-y:auto; overscroll-behavior:contain;
   padding:26px 16px; display:flex; flex-direction:column; gap:6px; scrollbar-width:thin}
@@ -121,7 +121,7 @@ h1,h2,h3,h4{margin:0; letter-spacing:-.02em}
 .paybox{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin:2px 0 12px}
 .paybox .amt{font-size:27px; font-weight:800; letter-spacing:-.03em; color:var(--out)}
 /* 지출 달력 */
-.cal{display:grid; grid-template-columns:repeat(7,1fr); gap:6px}
+.cal{display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px}
 .calh{font-size:11px; font-weight:800; color:var(--muted); text-align:center; padding:2px 0 4px}
 .calh.sun{color:var(--out)} .calh.sat{color:var(--save)}
 .cd{position:relative; min-height:74px; border:1px solid var(--line); border-radius:10px; padding:7px 8px;
@@ -332,17 +332,6 @@ code{background:var(--surface-2); border:1px solid var(--line-2); border-radius:
 .wleft.ok{color:var(--in)}
 .wleft.up{color:var(--out)}
 .wbar span{display:block; font-size:11.5px; color:var(--muted); font-weight:700; margin-top:4px}
-@media (max-width:900px){
-  .wrow,.wsum{grid-template-columns:1fr 1fr; gap:6px 10px; padding:12px 4px}
-  .wrow.head-row{display:none}                /* 좁은 화면에서는 값마다 이름을 붙인다 */
-  .wrow .wlbl,.wsum .wlbl,.wrow .wbud,.wsum .wbud,
-  .wrow .wbar,.wsum .wbar{grid-column:1/-1}
-  .wcarry{text-align:left}
-  .wused{text-align:left}
-  .wused::before,.wleft::before{font-size:11px; color:var(--muted); font-weight:700}
-  .wused::before{content:'쓴 돈 '}
-  .wleft::before{content:'남음 '}
-}
 .brow{display:grid; grid-template-columns:minmax(220px,1fr) 130px 130px 140px minmax(190px,240px); gap:14px; align-items:center; padding:9px 6px; border-bottom:1px solid var(--line-2)}
 .brow.head-row{border-bottom:1px solid var(--line); padding-bottom:9px}
 .brow.head-row > div{font-size:11.5px; color:var(--muted); font-weight:700}
@@ -554,6 +543,8 @@ code{background:var(--surface-2); border:1px solid var(--line-2); border-radius:
 /* ── 노트북 ─────────────────────────── */
 @media (max-width:1280px){
   .main{padding:26px 24px 60px}
+  .brow{grid-template-columns:minmax(150px,1fr) 110px 110px 118px minmax(140px,180px); gap:10px}
+  .wrow,.wsum{grid-template-columns:minmax(120px,1fr) 130px 104px 112px minmax(130px,170px); gap:10px}
   .txform{grid-template-columns:150px 1fr 1fr 1fr 128px 120px auto; gap:9px}
   .rform{grid-template-columns:1fr 1fr 1fr 128px 120px 76px auto; gap:9px}
   .stats{gap:10px}
@@ -563,7 +554,7 @@ code{background:var(--surface-2); border:1px solid var(--line-2); border-radius:
 
 /* ── 태블릿 ─────────────────────────── */
 @media (max-width:1024px){
-  .app{grid-template-columns:196px 1fr}
+  .app{grid-template-columns:196px minmax(0,1fr)}
   .sidein{padding:20px 12px}
   .main{padding:22px 18px 60px}
   .stats{grid-template-columns:repeat(3,1fr)}
@@ -571,7 +562,31 @@ code{background:var(--surface-2); border:1px solid var(--line-2); border-radius:
   .txform{grid-template-columns:150px 1fr 1fr 1fr; gap:9px}
   .rform{grid-template-columns:1fr 1fr 1fr 1fr; gap:9px}
   .grid2{grid-template-columns:1fr}
-  .brow{grid-template-columns:minmax(150px,1fr) 110px 110px 118px minmax(140px,180px); gap:10px}
+
+  /* 예산 트리: 이름 한 줄 → 숫자 3칸 → 진행률.
+     사이드바가 옆에 있는 폭에서는 다섯 칸이 들어가지 않는다 */
+  .brow{grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px 8px; padding:10px 4px}
+  .brow.head-row{display:none}
+  .brow .bname{grid-column:1/-1; margin-bottom:2px}
+  .brow > .barwrap{grid-column:1/-1; margin-top:3px}
+  .brow > div.r{text-align:left}
+  .mlbl{display:block; font-size:9.5px; font-weight:700; color:var(--muted); letter-spacing:.02em; margin-bottom:1px}
+  .brow .binput{text-align:left !important; width:100%; padding:5px 7px !important; font-size:12.5px}
+  .lv2{padding-left:10px} .lv3{padding-left:20px}
+  .lv1 .txt{font-size:13.5px} .lv3 .txt{font-size:12.5px}
+  .subtot{width:auto; font-size:12px}
+
+  /* 주차별 예산: 주차 한 줄 → 예산 → 쓴 돈·남음 → 진행률 */
+
+  .wrow,.wsum{grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px 10px; padding:12px 4px}
+  .wrow.head-row{display:none}                /* 좁은 화면에서는 값마다 이름을 붙인다 */
+  .wrow .wlbl,.wsum .wlbl,.wrow .wbud,.wsum .wbud,
+  .wrow .wbar,.wsum .wbar{grid-column:1/-1}
+  .wcarry{text-align:left}
+  .wused{text-align:left}
+  .wused::before,.wleft::before{font-size:11px; color:var(--muted); font-weight:700}
+  .wused::before{content:'쓴 돈 '}
+  .wleft::before{content:'남음 '}
 }
 
 /* ── 모바일 ─────────────────────────── */
@@ -638,17 +653,6 @@ code{background:var(--surface-2); border:1px solid var(--line-2); border-radius:
   .bs .v{font-size:17px}
   .bbar{font-size:12px; padding:9px 11px}
 
-  /* 예산 트리: 이름 한 줄 → 숫자 3칸 → 진행률 */
-  .brow{grid-template-columns:repeat(3,1fr); gap:5px 8px; padding:10px 4px}
-  .brow.head-row{display:none}
-  .brow .bname{grid-column:1/-1; margin-bottom:2px}
-  .brow > .barwrap{grid-column:1/-1; margin-top:3px}
-  .brow > div.r{text-align:left}
-  .mlbl{display:block; font-size:9.5px; font-weight:700; color:var(--muted); letter-spacing:.02em; margin-bottom:1px}
-  .brow .binput{text-align:left !important; width:100%; padding:5px 7px !important; font-size:12.5px}
-  .lv2{padding-left:10px} .lv3{padding-left:20px}
-  .lv1 .txt{font-size:13.5px} .lv3 .txt{font-size:12.5px}
-  .subtot{width:auto; font-size:12px}
 
   /* 목록·일정 행 */
   .rrow{flex-wrap:wrap; gap:7px; padding:9px 3px}
@@ -1858,7 +1862,7 @@ function renderTx(list){
         <button class="btn ico dl" data-del="${t.id}" title="삭제" aria-label="삭제">${ICON.del}</button>
       </div></td></tr>`;}).join('');
   });
-  $('#txList').innerHTML=html+'</tbody></table>';
+  $('#txList').innerHTML='<div class="tbwrap">'+html+'</tbody></table></div>';
 }
 /* 날짜 묶음 접기 */
 $('#txList').addEventListener('click',e=>{
