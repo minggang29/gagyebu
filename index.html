@@ -2890,14 +2890,14 @@ function renderCloudUI(){
     $('#cConnect').textContent='설정 저장'; $('#cOff').classList.remove('hide');
     const bad=cMsg.indexOf('실패')>=0;
     box.className='cloudbox '+(bad?'warn':'on');
-    let pull='';
-    if(lastPull){
-      const L=lastPull;
-      pull=`원문 ${L.got}건 받음`+(L.added?` · 대기 ${L.added}건 추가`:'')
-            +(L.dup?` · 이미 처리한 것 ${L.dup}건`:'')+(L.miss?` · 못 읽음 ${L.miss}건`:'')
-            +(L.kept?` · 다음에 다시 시도 ${L.kept}건`:'');
-      pull=`<span class="pullnote">마지막 알림 수신 ${hhmm(L.at)} — ${esc(pull)}</span>`;
-    }
+    const L=lastPull;
+    const pull='<span class="pullnote">'+(L
+      ? `마지막 알림 수신 ${hhmm(L.at)} — `+esc(`원문 ${L.got}건 받음`
+          +(L.added?` · 대기 ${L.added}건 추가`:'')
+          +(L.dup?` · 이미 처리한 것 ${L.dup}건`:'')
+          +(L.miss?` · 못 읽음 ${L.miss}건`:'')
+          +(L.kept?` · 다음에 다시 시도 ${L.kept}건`:''))
+      : '알림 수신 — 이 창을 연 뒤로 서버에 들어온 알림이 없습니다')+'</span>';
     box.innerHTML=`<span><span class="fsdot ${cBusy?'blink':''}"></span><b>${esc(cloud.space)}</b> 공간에 연결됨 · ${esc(cMsg||'대기 중')}${pull}</span>
       <span class="row" style="gap:6px"><button class="btn sm" id="cNow">지금 동기화</button><button class="btn sm" id="cPush" title="카테고리·예산이 뒤섞였을 때">이 기기 설정을 기준으로</button></span>`;
     const b=$('#cNow'); if(b)b.onclick=()=>syncNow(true);
