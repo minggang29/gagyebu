@@ -468,6 +468,7 @@ code{background:var(--surface-2); border:1px solid var(--line-2); border-radius:
 .btn.ico.dl:hover{color:var(--out); border-color:#F0C9C7; background:var(--out-soft)}
 
 /* 화면 맨 위·맨 아래 이동 */
+.pullnote{display:block; font-size:11.5px; font-weight:700; opacity:.78; margin-top:3px}
 .cloudbox{border-radius:var(--r-md); padding:12px 15px; margin-bottom:14px; font-size:13px; font-weight:600;
   background:var(--surface-2); border:1px solid var(--line); color:var(--ink-2);
   display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
@@ -2809,6 +2810,8 @@ async function patchLedger(lid,change){
     [{id:cloud.space+'::'+lid,doc:o,updated_at:Date.now()}]);}catch(e){}}
   return 'ok';
 }
+let lastPull=null;                    /* 마지막으로 서버에서 받아온 결과 */
+const hhmm=t=>{const d=new Date(t); return pad2(d.getHours())+':'+pad2(d.getMinutes());};
 async function pullInbox(){
   if(!cloud)return 0;
   let rows=null;
@@ -2818,14 +2821,14 @@ async function pullInbox(){
     try{rows=await cloudReq('GET',q+'&select=id,body&order=id&limit=300');}
     catch(e2){return 0;}                        /* 표가 없으면 조용히 넘어간다 */
   }
-  if(!rows||!rows.length)return 0;
-  const bag={}; let miss=0;
+  if(!rows||!rows.length)return 0;              /* 지난 수신 결과는 그대로 남겨 둔다 */
+  const bag={}; let miss=0, dup=0;
   rows.forEach(r=>{
     const body=String(r.body||''), at=Number(r.at)||0;
     const got=parseSMS(body,at);
     if(!got.length){                            /* 못 읽은 원문은 눈에 보이게 남긴다 */
-      const txt=body.trim();
-      if(txt&&!(db.rawin||[]).some(x=>x.body===txt)){
+      const txt=body.trim()||'(내용이 비어서 왔습니다 — 매크로의 Body 설정을 확인해 주세요)';
+      if(!(db.rawin||[]).some(x=>x.body===txt)){
         db.rawin=(db.rawin||[]).concat([{id:nid('r'),body:txt,at:at||Date.now()}]).slice(-30); miss++;}
       return;}
     got.forEach(o=>{o.row=r.id; const lid=routeOf(o); (bag[lid]=bag[lid]||[]).push(o);});});
@@ -2837,6 +2840,7 @@ async function pullInbox(){
     if(lid===meta.current){
       const have={}; (db.pending||[]).forEach(p=>have[p.key]=1);
       const fresh=items.filter(o=>!have[o.key]&&!db.smsDone[o.key]);
+      dup+=items.length-fresh.length;
       fresh.forEach(o=>delete o.row);
       if(fresh.length){db.pending=(db.pending||[]).concat(fresh); added+=fresh.length;}
       st='ok';
@@ -2845,6 +2849,7 @@ async function pullInbox(){
         st=await patchLedger(lid,o=>{
           const have={}; o.pending.forEach(p=>have[p.key]=1);
           const fresh=items.filter(x=>!have[x.key]&&!o.smsDone[x.key]);
+          dup+=items.length-fresh.length;
           fresh.forEach(x=>delete x.row);
           if(!fresh.length)return false;
           o.pending=o.pending.concat(fresh); added+=fresh.length;
@@ -2855,7 +2860,9 @@ async function pullInbox(){
   }
   const del=rows.map(r=>r.id).filter(id=>!kept.has(id));
   if(del.length){try{await cloudReq('DELETE','ledger_inbox?id=in.('+del.join(',')+')');}catch(e){}}
+  lastPull={got:rows.length,added,miss,dup,kept:kept.size,at:Date.now()};
   if(added||miss){persist(); renderSMS(); renderRaw(); renderRouteUI();}
+  renderCloudUI();
   return added;
 }
 /* 카드별로 어느 가계부에 넣을지 */
@@ -2883,7 +2890,15 @@ function renderCloudUI(){
     $('#cConnect').textContent='설정 저장'; $('#cOff').classList.remove('hide');
     const bad=cMsg.indexOf('실패')>=0;
     box.className='cloudbox '+(bad?'warn':'on');
-    box.innerHTML=`<span><span class="fsdot ${cBusy?'blink':''}"></span><b>${esc(cloud.space)}</b> 공간에 연결됨 · ${esc(cMsg||'대기 중')}</span>
+    let pull='';
+    if(lastPull){
+      const L=lastPull;
+      pull=`원문 ${L.got}건 받음`+(L.added?` · 대기 ${L.added}건 추가`:'')
+            +(L.dup?` · 이미 처리한 것 ${L.dup}건`:'')+(L.miss?` · 못 읽음 ${L.miss}건`:'')
+            +(L.kept?` · 다음에 다시 시도 ${L.kept}건`:'');
+      pull=`<span class="pullnote">마지막 알림 수신 ${hhmm(L.at)} — ${esc(pull)}</span>`;
+    }
+    box.innerHTML=`<span><span class="fsdot ${cBusy?'blink':''}"></span><b>${esc(cloud.space)}</b> 공간에 연결됨 · ${esc(cMsg||'대기 중')}${pull}</span>
       <span class="row" style="gap:6px"><button class="btn sm" id="cNow">지금 동기화</button><button class="btn sm" id="cPush" title="카테고리·예산이 뒤섞였을 때">이 기기 설정을 기준으로</button></span>`;
     const b=$('#cNow'); if(b)b.onclick=()=>syncNow(true);
     const pb=$('#cPush'); if(pb)pb.onclick=forcePushSettings;
