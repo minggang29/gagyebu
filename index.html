@@ -376,6 +376,28 @@ code{background:var(--surface-2); border:1px solid var(--line-2); border-radius:
 @keyframes mpop{from{opacity:0; transform:translateY(8px) scale(.98)}}
 .mmsg{font-size:14.5px; line-height:1.65; color:var(--ink); font-weight:500; white-space:pre-line}
 .mbox input{margin-top:14px}
+.mbox.wide{max-width:640px}
+.shead{display:flex; align-items:flex-start; gap:12px; justify-content:space-between; margin-bottom:12px}
+.shttl b{font-size:16px; font-weight:800; display:block}
+.shttl span{display:block; font-size:12.5px; color:var(--muted); font-weight:700; margin-top:3px}
+#shBody{max-height:min(58vh,480px); overflow-y:auto; margin:0 -4px}
+.srow{display:grid; grid-template-columns:52px minmax(0,1fr) 108px; gap:10px;
+  align-items:baseline; padding:9px 4px; border-bottom:1px solid var(--line-2)}
+.srow:last-child{border-bottom:0}
+.sdate{font-size:12px; color:var(--muted); font-weight:700}
+.smemo{min-width:0}
+.smemo b{font-weight:700; font-size:13.5px; display:block; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap}
+.smemo span{display:block; font-size:11.5px; color:var(--muted); font-weight:600; margin-top:1px}
+.samount{text-align:right; font-weight:800; font-variant-numeric:tabular-nums}
+.samount.back{color:var(--in)}
+.ssum{display:flex; justify-content:space-between; align-items:baseline;
+  border-top:1px solid var(--line); margin-top:4px; padding:11px 4px 2px; font-weight:800}
+.sempty{padding:22px 4px; color:var(--muted); font-weight:700; text-align:center}
+.brow .txt,.wrow .wlbl b{cursor:pointer}
+@media (max-width:520px){
+  .srow{grid-template-columns:48px minmax(0,1fr) 92px; gap:8px}
+}
 .mbtns{display:flex; justify-content:flex-end; gap:8px; margin-top:22px}
 .mbtns .btn{min-width:76px; justify-content:center; text-align:center}
 .btn.danger{background:var(--out); border-color:var(--out); color:#fff}
@@ -1119,6 +1141,16 @@ RegEx 사용    켜기
     <div class="mbtns"><button class="btn" id="mNo">취소</button><button class="btn primary" id="mYes">확인</button></div>
   </div>
 </div>
+<div class="modal hide" id="sheet">
+  <div class="mbox wide">
+    <div class="shead">
+      <div class="shttl"><b id="shTitle"></b><span id="shSub"></span></div>
+      <button class="btn sm" id="shSort">금액 큰 순</button>
+    </div>
+    <div id="shBody"></div>
+    <div class="mbtns"><button class="btn primary" id="shClose">닫기</button></div>
+  </div>
+</div>
 <div id="toasts"></div>
 <script>
 (function(){
@@ -1173,6 +1205,40 @@ function closeModal(v){document.getElementById('modal').classList.add('hide');
   const r=mRes; mRes=null; if(r)r(v);}
 function ask(msg,o){return openModal(msg,o).then(v=>v===true);}
 function askText(msg,o){o=Object.assign({input:'',ok:'추가'},o||{}); return openModal(msg,o);}
+/* 어떤 항목에서 돈이 나갔는지 한눈에 보는 내역 창 */
+let shCtx=null, shByAmt=false;
+function openTxSheet(title,sub,list){
+  shCtx={title,sub,list}; shByAmt=false; renderSheet();
+  document.getElementById('sheet').classList.remove('hide');
+  setTimeout(()=>document.getElementById('shClose').focus(),30);
+}
+function closeSheet(){document.getElementById('sheet').classList.add('hide'); shCtx=null;}
+function renderSheet(){
+  const c=shCtx; if(!c)return;
+  document.getElementById('shTitle').textContent=c.title;
+  document.getElementById('shSub').textContent=c.sub;
+  document.getElementById('shSort').textContent=shByAmt?'날짜순':'금액 큰 순';
+  document.getElementById('shSort').classList.toggle('hide',c.list.length<2);
+  const rows=c.list.slice().sort(shByAmt
+    ? (a,b)=>Math.abs(b.amount)-Math.abs(a.amount)
+    : (a,b)=>a.date.localeCompare(b.date)||(a.ord||0)-(b.ord||0));
+  const sum=rows.reduce((t,x)=>t+x.amount,0);
+  const body=document.getElementById('shBody');
+  if(!rows.length){body.innerHTML='<div class="sempty">이 달에는 기록이 없습니다.</div>'; return;}
+  body.innerHTML=rows.map(t=>{
+    const cat=byId(t.catId), par=cat&&cat.parentId?byId(cat.parentId):null;
+    const path=(par?par.name+' › ':'')+(cat?cat.name:'분류 없음');
+    const back=t.amount<0;
+    return `<div class="srow">
+      <div class="sdate">${t.date.slice(5).replace('-','/')}</div>
+      <div class="smemo"><b>${esc(t.memo||path)}</b><span>${esc(path)}${t.method?' · '+esc(t.method):''}</span></div>
+      <div class="samount${back?' back':''}">${back?'+'+won(-t.amount):won(t.amount)}</div>
+    </div>`;}).join('')
+    +`<div class="ssum"><span>${rows.length}건 합계</span><span>${won(sum)}</span></div>`;
+}
+document.getElementById('shSort').onclick=()=>{shByAmt=!shByAmt; renderSheet();};
+document.getElementById('shClose').onclick=closeSheet;
+document.getElementById('sheet').addEventListener('click',e=>{if(e.target.id==='sheet')closeSheet();});
 function toast(msg,type){
   const box=document.getElementById('toasts'), el=document.createElement('div');
   el.className='toast'+(type?' '+type:''); el.textContent=msg; box.appendChild(el);
@@ -1186,7 +1252,10 @@ document.getElementById('mYes').onclick=()=>{const I=document.getElementById('mI
 document.getElementById('mNo').onclick=()=>closeModal(false);
 document.getElementById('modal').onclick=e=>{if(e.target.id==='modal')closeModal(false);};
 document.getElementById('mInput').onkeydown=e=>{if(e.key==='Enter')document.getElementById('mYes').click();};
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&mRes)closeModal(false);});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  if(mRes)closeModal(false);
+  else if(shCtx)closeSheet();});
 
 /* ══════════════ 1. 데이터 모델 ══════════════ */
 const TYPE={income:{label:'수입',cls:'t-in',color:'var(--in)'},expense:{label:'지출',cls:'t-out',color:'var(--out)'},saving:{label:'저축',cls:'t-save',color:'var(--save)'}};
@@ -1966,11 +2035,41 @@ $('#txList').addEventListener('click',async e=>{
 });
 $('#txFilter').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
   txFilter=b.dataset.f; $$('#txFilter button').forEach(x=>x.classList.toggle('on',x===b)); renderTx(txOf(curYM));});
+$('#budgetTree').addEventListener('click',e=>{
+  if(e.target.closest('input,select,button'))return;
+  const row=e.target.closest('.brow[data-cid]'); if(!row)return;
+  const c=byId(row.dataset.cid); if(!c)return;
+  const set=new Set(descend(c.id));
+  const list=txOf(curYM).filter(t=>set.has(t.catId));
+  const b=budgetOf(c.id,curYM), used=list.reduce((a,t)=>a+t.amount,0);
+  const [y,m]=curYM.split('-').map(Number);
+  const goal=(rootOf(c)||{}).type==='saving';
+  const sub=y+'년 '+m+'월 · '+(b?'예산 '+won(b)+' · ':'예산 없음 · ')+
+    (goal?'저축 ':'지출 ')+won(used)+
+    (b?(used>=b?' · '+won(used-b)+(goal?' 더 모음':' 초과')
+          :' · '+won(b-used)+(goal?' 더 모으면 목표':' 남음'))
+       :(used&&!goal?' · 예산 밖':''));
+  openTxSheet(c.name,sub,list);
+});
 $('#budgetTree').addEventListener('click',e=>{const tw=e.target.closest('[data-tw]');if(!tw)return;
   const id=tw.dataset.tw; open.has(id)?open.delete(id):open.add(id); renderMonth();});
 $('#budgetTree').addEventListener('input',e=>{const i=e.target.closest('[data-bud]');if(!i)return;
   setBudget(i.dataset.bud,curYM,Number(i.value)||0); persist(); refreshBudgetRows();});
 $('#budgetTree').addEventListener('change',e=>{if(e.target.closest('[data-bud]'))renderMonth();});
+$('#weekBox').addEventListener('click',e=>{
+  if(e.target.closest('input,select,button'))return;
+  const row=e.target.closest('.wrow[data-wk]'); if(!row)return;
+  const n=Number(row.dataset.wk);
+  const r=weekRows(txOf(curYM)).find(x=>x.n===n); if(!r)return;
+  const set=new Set(descend(db.weekCat));
+  const day=t=>Number(t.date.slice(8,10));
+  const list=txOf(curYM).filter(t=>set.has(t.catId)&&day(t)>=r.s&&day(t)<=r.e);
+  const [y,m]=curYM.split('-').map(Number);
+  const span=r.s===r.e?m+'/'+r.s:m+'/'+r.s+'–'+m+'/'+r.e;
+  const sub=span+' · '+(byId(db.weekCat)||{}).name+' · 쓸 수 있는 돈 '+won(r.avail)+
+    ' · 쓴 돈 '+won(r.used)+(r.left<0?' · '+won(-r.left)+' 초과':' · '+won(r.left)+' 남음');
+  openTxSheet(n+'주차',sub,list);
+});
 $('#weekBox').addEventListener('input',e=>{
   const i=e.target.closest('[data-wb]'); if(!i)return;
   setWkBudget(curYM,Number(i.dataset.wb),Number(i.value)||0);
