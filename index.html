@@ -388,7 +388,8 @@ code{background:var(--surface-2); border:1px solid var(--line-2); border-radius:
 .smemo{min-width:0}
 .smemo b{font-weight:700; font-size:13.5px; display:block; overflow:hidden;
   text-overflow:ellipsis; white-space:nowrap}
-.smemo span{display:block; font-size:11.5px; color:var(--muted); font-weight:600; margin-top:1px}
+.smemo span{display:block; font-size:11.5px; color:var(--muted); font-weight:600; margin-top:1px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .samount{text-align:right; font-weight:800; font-variant-numeric:tabular-nums}
 .samount.back{color:var(--in)}
 .ssum{display:flex; justify-content:space-between; align-items:baseline;
@@ -1145,7 +1146,7 @@ RegEx 사용    켜기
   <div class="mbox wide">
     <div class="shead">
       <div class="shttl"><b id="shTitle"></b><span id="shSub"></span></div>
-      <button class="btn sm" id="shSort">금액 큰 순</button>
+      <div class="seg" id="shSort"><button class="on" data-ss="date">날짜순</button><button data-ss="amt">금액순</button></div>
     </div>
     <div id="shBody"></div>
     <div class="mbtns"><button class="btn primary" id="shClose">닫기</button></div>
@@ -1217,8 +1218,10 @@ function renderSheet(){
   const c=shCtx; if(!c)return;
   document.getElementById('shTitle').textContent=c.title;
   document.getElementById('shSub').textContent=c.sub;
-  document.getElementById('shSort').textContent=shByAmt?'날짜순':'금액 큰 순';
-  document.getElementById('shSort').classList.toggle('hide',c.list.length<2);
+  const seg=document.getElementById('shSort');
+  seg.querySelectorAll('[data-ss]').forEach(b=>
+    b.classList.toggle('on',(b.dataset.ss==='amt')===shByAmt));
+  seg.classList.toggle('hide',c.list.length<2);
   const rows=c.list.slice().sort(shByAmt
     ? (a,b)=>Math.abs(b.amount)-Math.abs(a.amount)
     : (a,b)=>a.date.localeCompare(b.date)||(a.ord||0)-(b.ord||0));
@@ -1236,7 +1239,9 @@ function renderSheet(){
     </div>`;}).join('')
     +`<div class="ssum"><span>${rows.length}건 합계</span><span>${won(sum)}</span></div>`;
 }
-document.getElementById('shSort').onclick=()=>{shByAmt=!shByAmt; renderSheet();};
+document.getElementById('shSort').onclick=e=>{
+  const b=e.target.closest('[data-ss]'); if(!b)return;
+  shByAmt=b.dataset.ss==='amt'; renderSheet();};
 document.getElementById('shClose').onclick=closeSheet;
 document.getElementById('sheet').addEventListener('click',e=>{if(e.target.id==='sheet')closeSheet();});
 function toast(msg,type){
