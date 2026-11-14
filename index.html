@@ -1559,16 +1559,27 @@ function setWkBudget(ym,i,v){
   if(!Object.keys(o).length)delete db.weekly[ym];
 }
 /* 고른 대분류의 주차별 예산·지출·이월을 계산한다 */
+/* 이월을 이어 줄 마지막 주 — 아직 오지 않은 주에는 넘기지 않는다 */
+function carryUntil(ym,weeks){
+  const [y,m]=ym.split('-').map(Number), now=new Date();
+  const cur=y*12+(m-1), nowM=now.getFullYear()*12+now.getMonth();
+  if(cur<nowM)return weeks.length;               /* 지나간 달은 끝까지 */
+  if(cur>nowM)return 0;                          /* 아직 오지 않은 달은 아예 */
+  const d=now.getDate(), i=weeks.findIndex(w=>d>=w.s&&d<=w.e);
+  return i<0?weeks.length:i+1;                   /* 이번 달은 이번 주까지 */
+}
 function weekRows(list){
   const top=db.weekCat, set=new Set(descend(top));
   const day=t=>Number(t.date.slice(8,10));
-  return weeksOf(curYM).map((w,i)=>{
+  const weeks=weeksOf(curYM), until=carryUntil(curYM,weeks);
+  return weeks.map((w,i)=>{
     const n=i+1;
     const used=list.filter(t=>set.has(t.catId)&&day(t)>=w.s&&day(t)<=w.e)
                    .reduce((a,t)=>a+t.amount,0);
     return {n,s:w.s,e:w.e,budget:wkBudget(curYM,n),used};
   }).map((r,i,all)=>{                              /* 남은 돈을 다음 주로 넘긴다 */
-    r.carry=i?all[i-1].left:0;
+    r.carry=(i&&r.n<=until)?all[i-1].left:0;
+    r.late=r.n>until;                              /* 아직 이월을 받지 않은 주 */
     r.avail=r.budget+r.carry;
     r.left=r.avail-r.used;
     return r;
@@ -1586,7 +1597,8 @@ function renderWeek(list){
   $('#weekTitle').textContent=y+'년 '+m+'월 주차별 예산';
   $('#wPick').value=curYM;
   $('#weekSub').textContent='‘'+(byId(db.weekCat)||{}).name+'’을 주 단위로 나눠 씁니다. '+
-    '월요일에 시작해 일요일에 끝나는 주로 끊고, 안 쓰고 남은 돈은 다음 주로 넘어갑니다.';
+    '월요일에 시작해 일요일에 끝나는 주로 끊고, 안 쓰고 남은 돈은 다음 주로 넘어갑니다. '+
+    '아직 오지 않은 주는 그 주가 될 때 이월을 받습니다.';
   const now=new Date(), thisMonth=(now.getFullYear()===y&&now.getMonth()+1===m);
   const td=now.getDate();
   const span=w=>w.s===w.e?m+'/'+w.s:m+'/'+w.s+'–'+m+'/'+w.e;
